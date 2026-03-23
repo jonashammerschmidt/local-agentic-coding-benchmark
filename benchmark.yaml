@@ -1,0 +1,36 @@
+version: 1
+
+defaults:
+  artifactsRoot: .benchmarks/runs
+  reportsRoot: .benchmarks/reports
+  timeoutSeconds: 900
+
+tools:
+  - id: codex
+    enabled: true
+  - id: opencode
+    enabled: false
+  - id: claude
+    enabled: false
+
+models:
+  - id: qwen3-coder-next:q4_K_M
+    provider: ollama
+    enabled: true
+  - id: qwen3-coder-next:q8_0
+    provider: ollama
+    enabled: false
+  - id: glm-4.7-flash:q4_K_M
+    provider: ollama
+    enabled: false
+  - id: gpt-oss:20b
+    provider: ollama
+    enabled: false
+  - id: gpt-oss:120b
+    provider: ollama
+    enabled: false
+
+tasks:
+  - id: run-tests
+    repoPath: /Users/jonas/dev/local-agentic-coding-benchmarks
+    prompt: "Führe die Tests aus."

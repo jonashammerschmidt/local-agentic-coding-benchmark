@@ -1,0 +1,77 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "↺ restore",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "restore",
+        "LocalAgenticCodingBenchmarks.sln"
+      ],
+      "group": "build",
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "⚒ build",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "--no-restore",
+        "LocalAgenticCodingBenchmarks.sln"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": "$msCompile",
+      "dependsOn": "restore"
+    },
+    {
+      "label": "🧪 test",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "test",
+        "--no-build",
+        "test/runner/LocalAgenticCodingBenchmark.TestRunner.csproj"
+      ],
+      "group": "test",
+      "problemMatcher": "$msCompile",
+      "dependsOn": "build"
+    },
+    {
+      "label": "▶ run cli",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "run",
+        "--no-build",
+        "--project",
+        "src/cli/LocalAgenticCodingBenchmark.Cli.csproj",
+        "--",
+        "run",
+        "benchmark.yaml"
+      ],
+      "problemMatcher": "$msCompile",
+      "dependsOn": "build"
+    },
+    {
+      "label": "📊 report",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "run",
+        "--no-build",
+        "--project",
+        "src/cli/LocalAgenticCodingBenchmark.Cli.csproj",
+        "--",
+        "report",
+        "benchmark.yaml"
+      ],
+      "problemMatcher": "$msCompile",
+      "dependsOn": "build"
+    }
+  ]
+}
