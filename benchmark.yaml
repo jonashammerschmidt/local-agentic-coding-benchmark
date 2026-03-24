@@ -4,6 +4,7 @@ defaults:
   artifactsRoot: .benchmarks/runs
   reportsRoot: .benchmarks/reports
   timeoutSeconds: 900
+  warmupPrompt: "Say Hello World!"
 
 tools:
   - id: codex

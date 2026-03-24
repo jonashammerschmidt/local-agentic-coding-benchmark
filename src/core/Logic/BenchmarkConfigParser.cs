@@ -102,7 +102,10 @@ public static class BenchmarkConfigParser
                 ReportsRoot = defaults.TryGetValue("reportsRoot", out var reportsRoot) ? reportsRoot : ".benchmarks/reports",
                 TimeoutSeconds = defaults.TryGetValue("timeoutSeconds", out var timeoutSeconds) && int.TryParse(timeoutSeconds, out var parsedTimeout)
                     ? parsedTimeout
-                    : 900
+                    : 900,
+                WarmupPrompt = defaults.TryGetValue("warmupPrompt", out var warmupPrompt) && !string.IsNullOrWhiteSpace(warmupPrompt)
+                    ? warmupPrompt
+                    : "Say Hello World!"
             },
             Tools = tools.Select(map => new ToolConfig
             {

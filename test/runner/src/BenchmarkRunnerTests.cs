@@ -36,10 +36,40 @@ public sealed class BenchmarkRunnerTests
 
         Assert.AreEqual(1, config.Version);
         Assert.AreEqual(".benchmarks/runs", config.Defaults.ArtifactsRoot);
+        Assert.AreEqual("Say Hello World!", config.Defaults.WarmupPrompt);
         Assert.AreEqual(1, config.Tools.Count);
         Assert.AreEqual("codex", config.Tools[0].Id);
         Assert.AreEqual("ollama", config.Models[0].Provider);
         Assert.AreEqual("Führe die Tests aus.", config.Tasks[0].Prompt);
+    }
+
+    [TestMethod]
+    public void ParsesConfiguredWarmupPrompt()
+    {
+        const string yaml = """
+            version: 1
+
+            defaults:
+              warmupPrompt: "Sag genau Hello World!"
+
+            tools:
+              - id: codex
+                enabled: true
+
+            models:
+              - id: model-a
+                provider: ollama
+                enabled: true
+
+            tasks:
+              - id: run-tests
+                repoPath: /tmp/repo
+                prompt: "Führe die Tests aus."
+            """;
+
+        var config = BenchmarkConfigParser.Parse(yaml.Split('\n'));
+
+        Assert.AreEqual("Sag genau Hello World!", config.Defaults.WarmupPrompt);
     }
 
     [TestMethod]
@@ -187,6 +217,73 @@ public sealed class BenchmarkRunnerTests
         var diff = await File.ReadAllTextAsync(Path.Combine(artifactDirectory, "code-diff.patch"));
         StringAssert.Contains(diff, "README.md");
         Assert.IsFalse(File.ReadAllText(targetFile).Contains("change", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public async Task RunsWarmupOutsideMeasuredDuration()
+    {
+        var temp = CreateTemporaryDirectory();
+        var repo = CreateGitRepo(temp);
+        var startedAt = DateTimeOffset.Parse("2026-03-24T10:00:00Z");
+        var finishedAt = startedAt.AddSeconds(2);
+        var specs = new List<ProcessSpec>();
+
+        var processRunner = new FakeProcessRunner(spec =>
+        {
+            specs.Add(spec);
+
+            if (specs.Count == 1)
+            {
+                return new ProcessExecutionResult
+                {
+                    ExitCode = 0,
+                    StandardOutput = "Hello World!",
+                    StandardError = string.Empty,
+                    StartedAtUtc = startedAt.AddSeconds(-5),
+                    FinishedAtUtc = startedAt.AddSeconds(-4),
+                    TimedOut = false
+                };
+            }
+
+            return new ProcessExecutionResult
+            {
+                ExitCode = 0,
+                StandardOutput = "timed output",
+                StandardError = string.Empty,
+                StartedAtUtc = startedAt,
+                FinishedAtUtc = finishedAt,
+                TimedOut = false
+            };
+        });
+
+        var config = new BenchmarkConfig
+        {
+            Version = 1,
+            Defaults = new DefaultsConfig
+            {
+                ArtifactsRoot = "runs",
+                ReportsRoot = "reports",
+                TimeoutSeconds = 5,
+                WarmupPrompt = "Sag Hello World!"
+            },
+            Tools = [new ToolConfig { Id = "codex", Enabled = true }],
+            Models = [new ModelConfig { Id = "model-a", Provider = "ollama", Enabled = true }],
+            Tasks = [new TaskConfig { Id = "task-a", RepoPath = repo, Prompt = "prompt" }]
+        };
+
+        var orchestrator = new BenchmarkOrchestrator(new ToolRunnerFactory(), new GitClient(), processRunner, new Clock());
+        var configPath = Path.Combine(temp, "benchmark.yaml");
+        await File.WriteAllTextAsync(configPath, "version: 1");
+
+        var results = await orchestrator.RunAsync(config, configPath, CancellationToken.None);
+
+        Assert.AreEqual(2, specs.Count);
+        CollectionAssert.Contains(specs[0].Arguments.ToArray(), "Sag Hello World!");
+        CollectionAssert.Contains(specs[1].Arguments.ToArray(), "prompt");
+        Assert.AreEqual(2d, results[0].DurationSeconds);
+        Assert.AreEqual(startedAt, results[0].StartedAtUtc);
+        Assert.AreEqual(finishedAt, results[0].FinishedAtUtc);
+        Assert.AreEqual("Hello World!", await File.ReadAllTextAsync(Path.Combine(results[0].ArtifactDirectory, "warmup-stdout.log")));
     }
 
     [TestMethod]

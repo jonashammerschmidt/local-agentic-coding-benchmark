@@ -92,7 +92,8 @@ public sealed class BenchmarkOrchestrator(
                         Model = model,
                         Task = task,
                         ArtifactDirectory = Path.Combine(artifactsRoot, directoryName),
-                        TimeoutSeconds = config.Defaults.TimeoutSeconds
+                        TimeoutSeconds = config.Defaults.TimeoutSeconds,
+                        WarmupPrompt = config.Defaults.WarmupPrompt
                     };
                 }
             }
@@ -102,7 +103,60 @@ public sealed class BenchmarkOrchestrator(
     private async Task<RunRecord> ExecuteRunAsync(PlannedRun run, CancellationToken cancellationToken)
     {
         var runner = runnerFactory.Create(run.Tool.Id);
-        var processSpec = runner.Build(run);
+        var warmupSpec = runner.BuildWarmup(run, run.WarmupPrompt);
+        var warmupResult = await processRunner.ExecuteAsync(warmupSpec, TimeSpan.FromSeconds(run.TimeoutSeconds), cancellationToken);
+        if (warmupResult.ExitCode != 0 || warmupResult.TimedOut)
+        {
+            var warmupDiff = gitClient.GetDiff(run.Task.RepoPath);
+
+            try
+            {
+                gitClient.ResetHard(run.Task.RepoPath);
+            }
+            catch (Exception ex)
+            {
+                warmupResult = new ProcessExecutionResult
+                {
+                    ExitCode = warmupResult.ExitCode,
+                    StandardOutput = warmupResult.StandardOutput,
+                    StandardError = string.Join(Environment.NewLine, warmupResult.StandardError, $"Failed to reset repository: {ex.Message}"),
+                    StartedAtUtc = warmupResult.StartedAtUtc,
+                    FinishedAtUtc = warmupResult.FinishedAtUtc,
+                    TimedOut = warmupResult.TimedOut
+                };
+            }
+
+            var failedWarmupRecord = new RunRecord
+            {
+                RunId = run.RunId,
+                Tool = run.Tool.Id,
+                Model = run.Model.Id,
+                Task = run.Task.Id,
+                RepoPath = run.Task.RepoPath,
+                Status = RunStatus.Failed,
+                ExitCode = warmupResult.ExitCode,
+                TimedOut = warmupResult.TimedOut,
+                ArtifactDirectory = run.ArtifactDirectory,
+                StartedAtUtc = warmupResult.StartedAtUtc,
+                FinishedAtUtc = warmupResult.FinishedAtUtc,
+                DurationSeconds = 0,
+                FailureReason = $"Warmup failed: {BuildFailureReason(warmupResult)}",
+                QualityRating = string.Empty
+            };
+
+            await WriteArtifactsAsync(
+                failedWarmupRecord,
+                string.Empty,
+                string.Empty,
+                string.Empty,
+                cancellationToken,
+                warmupDiff,
+                warmupStdout: warmupResult.StandardOutput,
+                warmupStderr: warmupResult.StandardError);
+            return failedWarmupRecord;
+        }
+
+        var processSpec = runner.BuildBenchmark(run);
         var processResult = await processRunner.ExecuteAsync(processSpec, TimeSpan.FromSeconds(run.TimeoutSeconds), cancellationToken);
         var diff = gitClient.GetDiff(run.Task.RepoPath);
 
@@ -154,7 +208,15 @@ public sealed class BenchmarkOrchestrator(
             QualityRating = string.Empty
         };
 
-        await WriteArtifactsAsync(record, agentOutput, processResult.StandardOutput, processResult.StandardError, cancellationToken, diff);
+        await WriteArtifactsAsync(
+            record,
+            agentOutput,
+            processResult.StandardOutput,
+            processResult.StandardError,
+            cancellationToken,
+            diff,
+            warmupResult.StandardOutput,
+            warmupResult.StandardError);
         return record;
     }
 
@@ -164,7 +226,9 @@ public sealed class BenchmarkOrchestrator(
         string stdout,
         string stderr,
         CancellationToken cancellationToken,
-        string diff = "")
+        string diff = "",
+        string warmupStdout = "",
+        string warmupStderr = "")
     {
         Directory.CreateDirectory(record.ArtifactDirectory);
 
@@ -172,6 +236,8 @@ public sealed class BenchmarkOrchestrator(
         await File.WriteAllTextAsync(Path.Combine(record.ArtifactDirectory, "stdout.log"), stdout, cancellationToken);
         await File.WriteAllTextAsync(Path.Combine(record.ArtifactDirectory, "stderr.log"), stderr, cancellationToken);
         await File.WriteAllTextAsync(Path.Combine(record.ArtifactDirectory, "code-diff.patch"), diff, cancellationToken);
+        await File.WriteAllTextAsync(Path.Combine(record.ArtifactDirectory, "warmup-stdout.log"), warmupStdout, cancellationToken);
+        await File.WriteAllTextAsync(Path.Combine(record.ArtifactDirectory, "warmup-stderr.log"), warmupStderr, cancellationToken);
 
         var stored = new StoredRunRecord
         {

@@ -11,6 +11,7 @@ defaults:
   artifactsRoot: .benchmarks/runs
   reportsRoot: .benchmarks/reports
   timeoutSeconds: 900
+  warmupPrompt: "Say Hello World!"
 
 tools:
   - id: codex
@@ -48,3 +49,5 @@ Jeder Run schreibt:
 - `stdout.log`
 - `stderr.log`
 - `code-diff.patch`
+- `warmup-stdout.log`
+- `warmup-stderr.log`

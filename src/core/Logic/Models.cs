@@ -16,6 +16,7 @@ public sealed class DefaultsConfig
     public string ArtifactsRoot { get; init; } = ".benchmarks/runs";
     public string ReportsRoot { get; init; } = ".benchmarks/reports";
     public int TimeoutSeconds { get; init; } = 900;
+    public string WarmupPrompt { get; init; } = "Say Hello World!";
 }
 
 public sealed class ToolConfig
@@ -46,6 +47,7 @@ public sealed class PlannedRun
     public TaskConfig Task { get; init; } = new();
     public string ArtifactDirectory { get; init; } = string.Empty;
     public int TimeoutSeconds { get; init; }
+    public string WarmupPrompt { get; init; } = "Say Hello World!";
 }
 
 public sealed class ProcessSpec
