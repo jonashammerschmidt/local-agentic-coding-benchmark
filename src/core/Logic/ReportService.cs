@@ -48,22 +48,69 @@ public sealed class ReportService
 
     public static string BuildMarkdown(IEnumerable<StoredRunRecord> records)
     {
-        var builder = new StringBuilder();
-        builder.AppendLine("| Run ID | Tool | Model | Task | Duration | Status | Quality Rating |");
-        builder.AppendLine("| --- | --- | --- | --- | --- | --- | --- |");
-
-        foreach (var record in records)
+        var headers = new[]
         {
-            builder.Append("| ")
-                .Append(record.RunId).Append(" | ")
-                .Append(record.Tool).Append(" | ")
-                .Append(record.Model).Append(" | ")
-                .Append(record.Task).Append(" | ")
-                .Append(record.DurationSeconds.ToString("0.###", CultureInfo.InvariantCulture)).Append("s | ")
-                .Append(record.Status).Append(" | ")
-                .Append(record.QualityRating ?? string.Empty).AppendLine(" |");
+            "Run ID",
+            "Tool",
+            "Model",
+            "Task",
+            "Duration",
+            "Status",
+            "Quality Rating"
+        };
+
+        var rows = records
+            .Select(record => new[]
+            {
+                record.RunId,
+                record.Tool,
+                record.Model,
+                record.Task,
+                $"{record.DurationSeconds.ToString("0.###", CultureInfo.InvariantCulture)}s",
+                record.Status.ToString(),
+                record.QualityRating ?? string.Empty
+            })
+            .ToArray();
+
+        var widths = headers
+            .Select((header, index) => Math.Max(header.Length, rows.Select(row => row[index].Length).DefaultIfEmpty(0).Max()))
+            .ToArray();
+
+        var builder = new StringBuilder();
+        AppendRow(builder, headers, widths);
+        AppendSeparator(builder, widths);
+
+        foreach (var row in rows)
+        {
+            AppendRow(builder, row, widths);
         }
 
         return builder.ToString();
+    }
+
+    private static void AppendRow(StringBuilder builder, IReadOnlyList<string> cells, IReadOnlyList<int> widths)
+    {
+        builder.Append('|');
+        for (var i = 0; i < cells.Count; i++)
+        {
+            builder.Append(' ')
+                .Append(cells[i].PadRight(widths[i]))
+                .Append(" |");
+        }
+
+        builder.AppendLine();
+    }
+
+    private static void AppendSeparator(StringBuilder builder, IReadOnlyList<int> widths)
+    {
+        builder.Append('|');
+        for (var i = 0; i < widths.Count; i++)
+        {
+            builder.Append(' ')
+                .Append(new string('-', widths[i]))
+                .Append(" |");
+        }
+
+        builder.AppendLine();
     }
 }
