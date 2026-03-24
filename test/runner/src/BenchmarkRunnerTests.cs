@@ -43,6 +43,34 @@ public sealed class BenchmarkRunnerTests
     }
 
     [TestMethod]
+    public void ExpandsHomeDirectoryInRepoPath()
+    {
+        const string yaml = """
+            version: 1
+
+            tools:
+              - id: codex
+                enabled: true
+
+            models:
+              - id: model-a
+                provider: ollama
+                enabled: true
+
+            tasks:
+              - id: run-tests
+                repoPath: ~/repo
+                prompt: "Führe die Tests aus."
+            """;
+
+        var config = BenchmarkConfigParser.Parse(yaml.Split('\n'));
+
+        Assert.AreEqual(
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "repo"),
+            config.Tasks[0].RepoPath);
+    }
+
+    [TestMethod]
     public void PlansFullCartesianProduct()
     {
         var config = new BenchmarkConfig

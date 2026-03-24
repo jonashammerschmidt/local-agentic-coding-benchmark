@@ -118,7 +118,7 @@ public static class BenchmarkConfigParser
             Tasks = tasks.Select(map => new TaskConfig
             {
                 Id = GetRequired(map, "id", "tasks"),
-                RepoPath = GetRequired(map, "repoPath", "tasks"),
+                RepoPath = ExpandHomeDirectory(GetRequired(map, "repoPath", "tasks")),
                 Prompt = GetRequired(map, "prompt", "tasks")
             }).ToList()
         };
@@ -205,5 +205,21 @@ public static class BenchmarkConfigParser
         }
 
         return trimmed;
+    }
+
+    private static string ExpandHomeDirectory(string path)
+    {
+        if (path == "~")
+        {
+            return Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        }
+
+        if (path.StartsWith("~/", StringComparison.Ordinal) || path.StartsWith("~\\", StringComparison.Ordinal))
+        {
+            var homeDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            return Path.Combine(homeDirectory, path[2..]);
+        }
+
+        return path;
     }
 }

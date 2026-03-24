@@ -27,7 +27,7 @@ models:
 
 tasks:
   - id: run-tests
-    repoPath: /abs/path/to/repo
+    repoPath: ~/src/my-repo
     prompt: "Fuehre die Tests aus."
 ```
 
