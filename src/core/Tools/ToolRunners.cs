@@ -100,7 +100,8 @@ public sealed class ClaudeToolRunner : IToolRunner
             "--model", run.Model.Id,
             "--output-format", "text",
             .. BuildPermissionArguments(run)
-        ]
+        ],
+        EnvironmentVariables = BuildEnvironmentVariables(run)
     };
 
     public ProcessSpec BuildBenchmark(PlannedRun run) => new()
@@ -115,7 +116,8 @@ public sealed class ClaudeToolRunner : IToolRunner
             "--model", run.Model.Id,
             "--output-format", "text",
             .. BuildPermissionArguments(run)
-        ]
+        ],
+        EnvironmentVariables = BuildEnvironmentVariables(run)
     };
 
     private static IReadOnlyList<string> BuildPermissionArguments(PlannedRun run) => run.SkipPermissions switch
@@ -125,5 +127,17 @@ public sealed class ClaudeToolRunner : IToolRunner
         PermissionRequestPolicy.Prompt => throw new BenchmarkConfigurationException(
             "Permission policy 'prompt' is not implemented yet. Use 'skip' or 'abort'."),
         _ => throw new BenchmarkConfigurationException($"Unsupported permission policy '{run.SkipPermissions}'.")
+    };
+
+    private static IReadOnlyDictionary<string, string?> BuildEnvironmentVariables(PlannedRun run) => run.Model.Provider switch
+    {
+        "ollama" => new Dictionary<string, string?>
+        {
+            ["ANTHROPIC_AUTH_TOKEN"] = "ollama",
+            ["ANTHROPIC_API_KEY"] = string.Empty,
+            ["ANTHROPIC_BASE_URL"] = "http://localhost:11434"
+        },
+        _ => throw new BenchmarkConfigurationException(
+            $"Unsupported provider '{run.Model.Provider}' for tool 'claude'. Supported values: ollama.")
     };
 }

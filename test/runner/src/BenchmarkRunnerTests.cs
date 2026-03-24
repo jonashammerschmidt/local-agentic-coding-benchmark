@@ -207,6 +207,41 @@ public sealed class BenchmarkRunnerTests
     }
 
     [TestMethod]
+    public void ClaudeRunnerBuildsBenchmarkForOllamaUsingAnthropicCompatibilityEnv()
+    {
+        var run = CreatePlannedRun("claude");
+        var runner = new ClaudeToolRunner();
+
+        var spec = runner.BuildBenchmark(run);
+
+        Assert.AreEqual("ollama", run.Model.Provider);
+        Assert.AreEqual("ollama", spec.EnvironmentVariables["ANTHROPIC_AUTH_TOKEN"]);
+        Assert.AreEqual(string.Empty, spec.EnvironmentVariables["ANTHROPIC_API_KEY"]);
+        Assert.AreEqual("http://localhost:11434", spec.EnvironmentVariables["ANTHROPIC_BASE_URL"]);
+    }
+
+    [TestMethod]
+    public void ClaudeRunnerRejectsUnsupportedProvider()
+    {
+        var baseRun = CreatePlannedRun("claude");
+        var run = new PlannedRun
+        {
+            RunId = baseRun.RunId,
+            ArtifactDirectory = baseRun.ArtifactDirectory,
+            TimeoutSeconds = baseRun.TimeoutSeconds,
+            WarmupPrompt = baseRun.WarmupPrompt,
+            SkipPermissions = baseRun.SkipPermissions,
+            Tool = baseRun.Tool,
+            Model = new ModelConfig { Id = "model-a", Provider = "unknown", Enabled = true },
+            Task = baseRun.Task
+        };
+        var runner = new ClaudeToolRunner();
+
+        var exception = Assert.ThrowsExactly<BenchmarkConfigurationException>(() => runner.BuildBenchmark(run));
+        StringAssert.Contains(exception.Message, "Unsupported provider 'unknown' for tool 'claude'");
+    }
+
+    [TestMethod]
     public async Task SkipsDirtyRepositoriesCleanly()
     {
         var temp = CreateTemporaryDirectory();
@@ -428,6 +463,8 @@ public sealed class BenchmarkRunnerTests
         CollectionAssert.AreEqual(
             new[] { "-p", run.Task.Prompt, "--model", run.Model.Id, "--output-format", "text", "--dangerously-skip-permissions" },
             spec.Arguments.ToArray());
+        Assert.AreEqual("ollama", spec.EnvironmentVariables["ANTHROPIC_AUTH_TOKEN"]);
+        Assert.AreEqual("http://localhost:11434", spec.EnvironmentVariables["ANTHROPIC_BASE_URL"]);
     }
 
     [TestMethod]

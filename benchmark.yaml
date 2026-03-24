@@ -11,9 +11,9 @@ tools:
   - id: codex
     enabled: true
   - id: opencode
-    enabled: false
+    enabled: true
   - id: claude
-    enabled: false
+    enabled: true
 
 models:
   - id: qwen3-coder-next:q4_K_M
@@ -21,18 +21,21 @@ models:
     enabled: true
   - id: qwen3-coder-next:q8_0
     provider: ollama
-    enabled: false
+    enabled: true
   - id: glm-4.7-flash:q4_K_M
     provider: ollama
-    enabled: false
+    enabled: true
   - id: gpt-oss:20b
     provider: ollama
-    enabled: false
+    enabled: true
   - id: gpt-oss:120b
     provider: ollama
-    enabled: false
+    enabled: true
 
 tasks:
   - id: run-tests
-    repoPath: /Users/jonas/dev/local-agentic-coding-benchmarks
+    repoPath: ~/dev/fst-common
     prompt: "Führe die Tests aus."
+  - id: run-build-checks
+    repoPath: ~/dev/fst-common
+    prompt: "Führe die Build-Checks aus."

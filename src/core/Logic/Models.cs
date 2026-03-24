@@ -65,6 +65,7 @@ public sealed class ProcessSpec
     public IReadOnlyList<string> Arguments { get; init; } = [];
     public string WorkingDirectory { get; init; } = string.Empty;
     public string? AgentOutputFilePath { get; init; }
+    public IReadOnlyDictionary<string, string?> EnvironmentVariables { get; init; } = new Dictionary<string, string?>();
 }
 
 public sealed class ProcessExecutionResult

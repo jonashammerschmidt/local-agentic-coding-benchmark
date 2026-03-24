@@ -35,6 +35,11 @@ public sealed class SystemProcessRunner : IProcessRunner
             process.StartInfo.ArgumentList.Add(argument);
         }
 
+        foreach (var environmentVariable in spec.EnvironmentVariables)
+        {
+            process.StartInfo.Environment[environmentVariable.Key] = environmentVariable.Value ?? string.Empty;
+        }
+
         process.OutputDataReceived += (_, args) =>
         {
             if (args.Data is not null)
