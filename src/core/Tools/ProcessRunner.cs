@@ -81,7 +81,7 @@ public sealed class SystemProcessRunner : IProcessRunner
         try
         {
             await process.WaitForExitAsync(timeoutCts.Token);
-            return new ProcessExecutionResult
+            var result = new ProcessExecutionResult
             {
                 ExitCode = process.ExitCode,
                 StandardOutput = stdout.ToString(),
@@ -90,11 +90,14 @@ public sealed class SystemProcessRunner : IProcessRunner
                 FinishedAtUtc = DateTimeOffset.UtcNow,
                 TimedOut = false
             };
+
+            PersistAgentOutput(spec, result.StandardOutput);
+            return result;
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             TryKill(process);
-            return new ProcessExecutionResult
+            var result = new ProcessExecutionResult
             {
                 ExitCode = -1,
                 StandardOutput = stdout.ToString(),
@@ -103,7 +106,26 @@ public sealed class SystemProcessRunner : IProcessRunner
                 FinishedAtUtc = DateTimeOffset.UtcNow,
                 TimedOut = true
             };
+
+            PersistAgentOutput(spec, result.StandardOutput);
+            return result;
         }
+    }
+
+    private static void PersistAgentOutput(ProcessSpec spec, string standardOutput)
+    {
+        if (string.IsNullOrWhiteSpace(spec.AgentOutputFilePath) || File.Exists(spec.AgentOutputFilePath))
+        {
+            return;
+        }
+
+        var directory = Path.GetDirectoryName(spec.AgentOutputFilePath);
+        if (!string.IsNullOrWhiteSpace(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        File.WriteAllText(spec.AgentOutputFilePath, standardOutput);
     }
 
     private static void TryKill(Process process)

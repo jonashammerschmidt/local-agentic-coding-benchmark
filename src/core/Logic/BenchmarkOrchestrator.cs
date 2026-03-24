@@ -93,7 +93,8 @@ public sealed class BenchmarkOrchestrator(
                         Task = task,
                         ArtifactDirectory = Path.Combine(artifactsRoot, directoryName),
                         TimeoutSeconds = config.Defaults.TimeoutSeconds,
-                        WarmupPrompt = config.Defaults.WarmupPrompt
+                        WarmupPrompt = config.Defaults.WarmupPrompt,
+                        SkipPermissions = config.Defaults.SkipPermissions
                     };
                 }
             }

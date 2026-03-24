@@ -5,6 +5,7 @@ defaults:
   reportsRoot: .benchmarks/reports
   timeoutSeconds: 900
   warmupPrompt: "Say Hello World!"
+  skipPermissions: abort
 
 tools:
   - id: codex

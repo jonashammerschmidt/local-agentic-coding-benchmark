@@ -105,7 +105,8 @@ public static class BenchmarkConfigParser
                     : 900,
                 WarmupPrompt = defaults.TryGetValue("warmupPrompt", out var warmupPrompt) && !string.IsNullOrWhiteSpace(warmupPrompt)
                     ? warmupPrompt
-                    : "Say Hello World!"
+                    : "Say Hello World!",
+                SkipPermissions = GetPermissionRequestPolicy(defaults, "skipPermissions")
             },
             Tools = tools.Select(map => new ToolConfig
             {
@@ -196,6 +197,23 @@ public static class BenchmarkConfigParser
         }
 
         return value.Equals("true", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static PermissionRequestPolicy GetPermissionRequestPolicy(Dictionary<string, string> map, string key)
+    {
+        if (!map.TryGetValue(key, out var value) || string.IsNullOrWhiteSpace(value))
+        {
+            return PermissionRequestPolicy.Abort;
+        }
+
+        return value.Trim().ToLowerInvariant() switch
+        {
+            "skip" => PermissionRequestPolicy.Skip,
+            "abort" => PermissionRequestPolicy.Abort,
+            "prompt" => PermissionRequestPolicy.Prompt,
+            _ => throw new BenchmarkConfigurationException(
+                $"Unsupported value '{value}' for defaults.{key}. Supported values: skip, abort. Reserved for future use: prompt.")
+        };
     }
 
     private static string Unquote(string value)

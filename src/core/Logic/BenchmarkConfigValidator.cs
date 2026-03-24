@@ -16,6 +16,11 @@ public static class BenchmarkConfigValidator
             throw new BenchmarkConfigurationException("defaults.timeoutSeconds must be greater than zero.");
         }
 
+        if (config.Defaults.SkipPermissions == PermissionRequestPolicy.Prompt)
+        {
+            throw new BenchmarkConfigurationException("defaults.skipPermissions value 'prompt' is reserved but not implemented yet. Use 'skip' or 'abort'.");
+        }
+
         EnsureUnique(config.Tools.Select(t => t.Id), "tools");
         EnsureUnique(config.Models.Select(m => m.Id), "models");
         EnsureUnique(config.Tasks.Select(t => t.Id), "tasks");

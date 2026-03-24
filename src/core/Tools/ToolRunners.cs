@@ -75,6 +75,7 @@ public sealed class OpenCodeToolRunner : IToolRunner
     {
         FileName = "opencode",
         WorkingDirectory = run.Task.RepoPath,
+        AgentOutputFilePath = Path.Combine(run.ArtifactDirectory, "agent-output.md"),
         Arguments =
         [
             "run",
@@ -97,7 +98,8 @@ public sealed class ClaudeToolRunner : IToolRunner
             "-p",
             warmupPrompt,
             "--model", run.Model.Id,
-            "--cwd", run.Task.RepoPath
+            "--output-format", "text",
+            .. BuildPermissionArguments(run)
         ]
     };
 
@@ -105,12 +107,23 @@ public sealed class ClaudeToolRunner : IToolRunner
     {
         FileName = "claude",
         WorkingDirectory = run.Task.RepoPath,
+        AgentOutputFilePath = Path.Combine(run.ArtifactDirectory, "agent-output.md"),
         Arguments =
         [
             "-p",
             run.Task.Prompt,
             "--model", run.Model.Id,
-            "--cwd", run.Task.RepoPath
+            "--output-format", "text",
+            .. BuildPermissionArguments(run)
         ]
+    };
+
+    private static IReadOnlyList<string> BuildPermissionArguments(PlannedRun run) => run.SkipPermissions switch
+    {
+        PermissionRequestPolicy.Skip => ["--dangerously-skip-permissions"],
+        PermissionRequestPolicy.Abort => [],
+        PermissionRequestPolicy.Prompt => throw new BenchmarkConfigurationException(
+            "Permission policy 'prompt' is not implemented yet. Use 'skip' or 'abort'."),
+        _ => throw new BenchmarkConfigurationException($"Unsupported permission policy '{run.SkipPermissions}'.")
     };
 }

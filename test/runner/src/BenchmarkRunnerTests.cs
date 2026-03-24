@@ -73,6 +73,61 @@ public sealed class BenchmarkRunnerTests
     }
 
     [TestMethod]
+    public void DefaultsSkipPermissionsPolicyToAbort()
+    {
+        const string yaml = """
+            version: 1
+
+            tools:
+              - id: codex
+                enabled: true
+
+            models:
+              - id: model-a
+                provider: ollama
+                enabled: true
+
+            tasks:
+              - id: run-tests
+                repoPath: /tmp/repo
+                prompt: "Führe die Tests aus."
+            """;
+
+        var config = BenchmarkConfigParser.Parse(yaml.Split('\n'));
+
+        Assert.AreEqual(PermissionRequestPolicy.Abort, config.Defaults.SkipPermissions);
+    }
+
+    [TestMethod]
+    public void ParsesConfiguredSkipPermissionsPolicy()
+    {
+        const string yaml = """
+            version: 1
+
+            defaults:
+              skipPermissions: abort
+
+            tools:
+              - id: codex
+                enabled: true
+
+            models:
+              - id: model-a
+                provider: ollama
+                enabled: true
+
+            tasks:
+              - id: run-tests
+                repoPath: /tmp/repo
+                prompt: "Führe die Tests aus."
+            """;
+
+        var config = BenchmarkConfigParser.Parse(yaml.Split('\n'));
+
+        Assert.AreEqual(PermissionRequestPolicy.Abort, config.Defaults.SkipPermissions);
+    }
+
+    [TestMethod]
     public void ExpandsHomeDirectoryInRepoPath()
     {
         const string yaml = """
@@ -131,6 +186,24 @@ public sealed class BenchmarkRunnerTests
         };
 
         Assert.ThrowsExactly<BenchmarkConfigurationException>(() => BenchmarkConfigValidator.Validate(config));
+    }
+
+    [TestMethod]
+    public void RejectsPromptPermissionPolicyUntilImplemented()
+    {
+        var temp = CreateTemporaryDirectory();
+        var repo = CreateGitRepo(temp);
+        var config = new BenchmarkConfig
+        {
+            Version = 1,
+            Defaults = new DefaultsConfig { SkipPermissions = PermissionRequestPolicy.Prompt },
+            Tools = [new ToolConfig { Id = "claude", Enabled = true }],
+            Models = [new ModelConfig { Id = "m1", Provider = "ollama", Enabled = true }],
+            Tasks = [new TaskConfig { Id = "t1", RepoPath = repo, Prompt = "prompt" }]
+        };
+
+        var exception = Assert.ThrowsExactly<BenchmarkConfigurationException>(() => BenchmarkConfigValidator.Validate(config));
+        StringAssert.Contains(exception.Message, "prompt");
     }
 
     [TestMethod]
@@ -303,8 +376,8 @@ public sealed class BenchmarkRunnerTests
             }
         ]);
 
-        StringAssert.Contains(markdown, "| Run ID | Tool | Model | Task | Duration | Status | Quality Rating |");
-        StringAssert.Contains(markdown, "| run-1 | codex | model-a | task-a | 1.25s | Succeeded |  |");
+        StringAssert.Contains(markdown, "| Run ID | Tool  | Model   | Task   | Duration | Status    | Quality Rating |");
+        StringAssert.Contains(markdown, "| run-1  | codex | model-a | task-a | 1.25s    | Succeeded |                |");
     }
 
     [TestMethod]
@@ -324,6 +397,84 @@ public sealed class BenchmarkRunnerTests
         Assert.IsFalse(result.TimedOut);
         StringAssert.Contains(result.StandardOutput, "git version");
     }
+
+    [TestMethod]
+    public void OpenCodeRunnerBuildsBenchmarkLikeCodexIntegration()
+    {
+        var run = CreatePlannedRun("opencode");
+        var runner = new OpenCodeToolRunner();
+
+        var spec = runner.BuildBenchmark(run);
+
+        Assert.AreEqual("opencode", spec.FileName);
+        Assert.AreEqual(run.Task.RepoPath, spec.WorkingDirectory);
+        Assert.AreEqual(Path.Combine(run.ArtifactDirectory, "agent-output.md"), spec.AgentOutputFilePath);
+        CollectionAssert.AreEqual(
+            new[] { "run", "--model", run.Model.Id, run.Task.Prompt },
+            spec.Arguments.ToArray());
+    }
+
+    [TestMethod]
+    public void ClaudeRunnerBuildsBenchmarkLikeCodexIntegration()
+    {
+        var run = CreatePlannedRun("claude");
+        var runner = new ClaudeToolRunner();
+
+        var spec = runner.BuildBenchmark(run);
+
+        Assert.AreEqual("claude", spec.FileName);
+        Assert.AreEqual(run.Task.RepoPath, spec.WorkingDirectory);
+        Assert.AreEqual(Path.Combine(run.ArtifactDirectory, "agent-output.md"), spec.AgentOutputFilePath);
+        CollectionAssert.AreEqual(
+            new[] { "-p", run.Task.Prompt, "--model", run.Model.Id, "--output-format", "text", "--dangerously-skip-permissions" },
+            spec.Arguments.ToArray());
+    }
+
+    [TestMethod]
+    public void ClaudeRunnerOmitsSkipPermissionsFlagWhenConfiguredToAbort()
+    {
+        var run = CreatePlannedRun("claude", PermissionRequestPolicy.Abort);
+        var runner = new ClaudeToolRunner();
+
+        var spec = runner.BuildBenchmark(run);
+
+        CollectionAssert.AreEqual(
+            new[] { "-p", run.Task.Prompt, "--model", run.Model.Id, "--output-format", "text" },
+            spec.Arguments.ToArray());
+    }
+
+    [TestMethod]
+    public async Task SystemProcessRunnerPersistsStdoutAsAgentOutputWhenRequested()
+    {
+        var temp = CreateTemporaryDirectory();
+        var outputPath = Path.Combine(temp, "agent-output.md");
+        var runner = new SystemProcessRunner();
+        var spec = new ProcessSpec
+        {
+            FileName = "git",
+            Arguments = ["--version"],
+            WorkingDirectory = Directory.GetCurrentDirectory(),
+            AgentOutputFilePath = outputPath
+        };
+
+        var result = await runner.ExecuteAsync(spec, TimeSpan.FromSeconds(10), CancellationToken.None);
+
+        Assert.AreEqual(0, result.ExitCode);
+        Assert.IsTrue(File.Exists(outputPath));
+        StringAssert.Contains(await File.ReadAllTextAsync(outputPath), "git version");
+    }
+
+    private static PlannedRun CreatePlannedRun(string toolId, PermissionRequestPolicy skipPermissions = PermissionRequestPolicy.Skip) => new()
+    {
+        RunId = "run-1",
+        ArtifactDirectory = "/tmp/artifacts/run-1",
+        TimeoutSeconds = 900,
+        WarmupPrompt = "Hello World!",
+        SkipPermissions = skipPermissions,
+        Tool = new ToolConfig { Id = toolId, Enabled = true },
+        Model = new ModelConfig { Id = "model-a", Provider = "ollama", Enabled = true },
+        Task = new TaskConfig { Id = "task-a", RepoPath = "/tmp/repo", Prompt = "Do the thing" }
+    };
 
     private static string CreateTemporaryDirectory()
     {

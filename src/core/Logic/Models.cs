@@ -17,6 +17,7 @@ public sealed class DefaultsConfig
     public string ReportsRoot { get; init; } = ".benchmarks/reports";
     public int TimeoutSeconds { get; init; } = 900;
     public string WarmupPrompt { get; init; } = "Say Hello World!";
+    public PermissionRequestPolicy SkipPermissions { get; init; } = PermissionRequestPolicy.Skip;
 }
 
 public sealed class ToolConfig
@@ -48,6 +49,14 @@ public sealed class PlannedRun
     public string ArtifactDirectory { get; init; } = string.Empty;
     public int TimeoutSeconds { get; init; }
     public string WarmupPrompt { get; init; } = "Say Hello World!";
+    public PermissionRequestPolicy SkipPermissions { get; init; } = PermissionRequestPolicy.Skip;
+}
+
+public enum PermissionRequestPolicy
+{
+    Skip,
+    Abort,
+    Prompt
 }
 
 public sealed class ProcessSpec
