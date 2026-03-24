@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace LocalAgenticCodingBenchmark.Core;
 
 public interface IToolRunner
@@ -59,6 +61,8 @@ public sealed class OpenCodeToolRunner : IToolRunner
 {
     public string ToolId => "opencode";
 
+    private static string BuildOpenCodeModelId(ModelConfig model) => $"{model.Provider}/{model.Id}";
+
     public ProcessSpec BuildWarmup(PlannedRun run, string warmupPrompt) => new()
     {
         FileName = "opencode",
@@ -66,9 +70,10 @@ public sealed class OpenCodeToolRunner : IToolRunner
         Arguments =
         [
             "run",
-            "--model", run.Model.Id,
+            "--model", BuildOpenCodeModelId(run.Model),
             warmupPrompt
-        ]
+        ],
+        EnvironmentVariables = BuildEnvironmentVariables(run)
     };
 
     public ProcessSpec BuildBenchmark(PlannedRun run) => new()
@@ -79,9 +84,42 @@ public sealed class OpenCodeToolRunner : IToolRunner
         Arguments =
         [
             "run",
-            "--model", run.Model.Id,
+            "--model", BuildOpenCodeModelId(run.Model),
             run.Task.Prompt
-        ]
+        ],
+        EnvironmentVariables = BuildEnvironmentVariables(run)
+    };
+
+    private static IReadOnlyDictionary<string, string?> BuildEnvironmentVariables(PlannedRun run) => run.Model.Provider switch
+    {
+        "ollama" => new Dictionary<string, string?>
+        {
+            ["OPENCODE_CONFIG_CONTENT"] = JsonSerializer.Serialize(new
+            {
+                provider = new
+                {
+                    ollama = new
+                    {
+                        models = new Dictionary<string, object>
+                        {
+                            [run.Model.Id] = new
+                            {
+                                name = run.Model.Id,
+                                _launch = true
+                            }
+                        },
+                        name = "Ollama",
+                        npm = "@ai-sdk/openai-compatible",
+                        options = new
+                        {
+                            baseURL = "http://127.0.0.1:11434/v1"
+                        }
+                    }
+                }
+            })
+        },
+        _ => throw new BenchmarkConfigurationException(
+            $"Unsupported provider '{run.Model.Provider}' for tool 'opencode'. Supported values: ollama.")
     };
 }
 

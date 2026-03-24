@@ -26,7 +26,7 @@
         "isDefault": true
       },
       "problemMatcher": "$msCompile",
-      "dependsOn": "restore"
+      "dependsOn": "↺ restore"
     },
     {
       "label": "🧪 test",
@@ -39,7 +39,7 @@
       ],
       "group": "test",
       "problemMatcher": "$msCompile",
-      "dependsOn": "build"
+      "dependsOn": "⚒ build"
     },
     {
       "label": "▶ run cli",
@@ -55,7 +55,7 @@
         "benchmark.yaml"
       ],
       "problemMatcher": "$msCompile",
-      "dependsOn": "build"
+      "dependsOn": "⚒ build"
     },
     {
       "label": "📊 report",
@@ -71,7 +71,7 @@
         "benchmark.yaml"
       ],
       "problemMatcher": "$msCompile",
-      "dependsOn": "build"
+      "dependsOn": "⚒ build"
     }
   ]
 }

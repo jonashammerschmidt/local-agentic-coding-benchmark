@@ -445,8 +445,25 @@ public sealed class BenchmarkRunnerTests
         Assert.AreEqual(run.Task.RepoPath, spec.WorkingDirectory);
         Assert.AreEqual(Path.Combine(run.ArtifactDirectory, "agent-output.md"), spec.AgentOutputFilePath);
         CollectionAssert.AreEqual(
-            new[] { "run", "--model", run.Model.Id, run.Task.Prompt },
+            new[] { "run", "--model", $"{run.Model.Provider}/{run.Model.Id}", run.Task.Prompt },
             spec.Arguments.ToArray());
+        StringAssert.Contains(spec.EnvironmentVariables["OPENCODE_CONFIG_CONTENT"], run.Model.Id);
+    }
+
+    [TestMethod]
+    public void OpenCodeRunnerBuildsWarmupWithProviderQualifiedModel()
+    {
+        var run = CreatePlannedRun("opencode");
+        var runner = new OpenCodeToolRunner();
+
+        var spec = runner.BuildWarmup(run, "Hello World!");
+
+        Assert.AreEqual("opencode", spec.FileName);
+        Assert.AreEqual(run.Task.RepoPath, spec.WorkingDirectory);
+        CollectionAssert.AreEqual(
+            new[] { "run", "--model", $"{run.Model.Provider}/{run.Model.Id}", "Hello World!" },
+            spec.Arguments.ToArray());
+        StringAssert.Contains(spec.EnvironmentVariables["OPENCODE_CONFIG_CONTENT"], run.Model.Id);
     }
 
     [TestMethod]
