@@ -15,6 +15,7 @@ public sealed class GitClient
 
     public string GetDiff(string repoPath)
     {
+        RunGit(repoPath, "add", "--intent-to-add", "--all");
         var output = RunGit(repoPath, "diff", "--binary", "--full-index");
         return output.StandardOutput;
     }

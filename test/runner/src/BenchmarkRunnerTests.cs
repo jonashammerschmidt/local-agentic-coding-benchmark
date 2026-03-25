@@ -328,6 +328,54 @@ public sealed class BenchmarkRunnerTests
     }
 
     [TestMethod]
+    public async Task WritesArtifactsForNewFilesInCodeDiffPatch()
+    {
+        var temp = CreateTemporaryDirectory();
+        var repo = CreateGitRepo(temp);
+        var addedFile = Path.Combine(repo, "new-file.txt");
+
+        var processRunner = new FakeProcessRunner(_ =>
+        {
+            File.WriteAllText(addedFile, "new content");
+            return new ProcessExecutionResult
+            {
+                ExitCode = 3,
+                StandardOutput = "agent output",
+                StandardError = "tool failed",
+                StartedAtUtc = DateTimeOffset.UtcNow.AddSeconds(-1),
+                FinishedAtUtc = DateTimeOffset.UtcNow,
+                TimedOut = false
+            };
+        });
+
+        var config = new BenchmarkConfig
+        {
+            Version = 1,
+            Defaults = new DefaultsConfig
+            {
+                ArtifactsRoot = "runs",
+                ReportsRoot = "reports",
+                TimeoutSeconds = 5
+            },
+            Tools = [new ToolConfig { Id = "opencode", Enabled = true }],
+            Models = [new ModelConfig { Id = "model-a", Provider = "ollama", Enabled = true }],
+            Tasks = [new TaskConfig { Id = "task-a", RepoPath = repo, Prompt = "prompt" }]
+        };
+
+        var orchestrator = new BenchmarkOrchestrator(new ToolRunnerFactory(), new GitClient(), processRunner, new Clock());
+        var configPath = Path.Combine(temp, "benchmark.yaml");
+        await File.WriteAllTextAsync(configPath, "version: 1");
+
+        var results = await orchestrator.RunAsync(config, configPath, CancellationToken.None);
+        var artifactDirectory = results[0].ArtifactDirectory;
+
+        var diff = await File.ReadAllTextAsync(Path.Combine(artifactDirectory, "code-diff.patch"));
+        StringAssert.Contains(diff, "new-file.txt");
+        StringAssert.Contains(diff, "new content");
+        Assert.IsFalse(File.Exists(addedFile));
+    }
+
+    [TestMethod]
     public async Task RunsWarmupOutsideMeasuredDuration()
     {
         var temp = CreateTemporaryDirectory();
