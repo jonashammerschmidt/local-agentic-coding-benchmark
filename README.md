@@ -31,6 +31,7 @@ tasks:
   - id: run-tests
     repoPath: ~/src/my-repo
     prompt: "Fuehre die Tests aus."
+    enabled: true
 ```
 
 `defaults.skipPermissions` unterstuetzt aktuell:

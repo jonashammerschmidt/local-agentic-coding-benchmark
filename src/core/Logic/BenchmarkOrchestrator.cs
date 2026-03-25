@@ -75,7 +75,7 @@ public sealed class BenchmarkOrchestrator(
     {
         var enabledTools = config.Tools.Where(t => t.Enabled).ToArray();
         var enabledModels = config.Models.Where(m => m.Enabled).ToArray();
-        var tasks = config.Tasks;
+        var tasks = config.Tasks.Where(t => t.Enabled).ToArray();
 
         foreach (var tool in enabledTools)
         {

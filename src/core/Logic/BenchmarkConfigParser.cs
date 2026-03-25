@@ -123,7 +123,8 @@ public static class BenchmarkConfigParser
             {
                 Id = GetRequired(map, "id", "tasks"),
                 RepoPath = ExpandHomeDirectory(GetRequired(map, "repoPath", "tasks")),
-                Prompt = GetRequired(map, "prompt", "tasks")
+                Prompt = GetRequired(map, "prompt", "tasks"),
+                Enabled = GetBool(map, "enabled")
             }).ToList()
         };
     }

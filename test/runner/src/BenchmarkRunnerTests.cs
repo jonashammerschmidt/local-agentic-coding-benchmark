@@ -30,6 +30,7 @@ public sealed class BenchmarkRunnerTests
               - id: run-tests
                 repoPath: /tmp/repo
                 prompt: "Führe die Tests aus."
+                enabled: true
             """;
 
         var config = BenchmarkConfigParser.Parse(yaml.Split('\n'));
@@ -41,6 +42,7 @@ public sealed class BenchmarkRunnerTests
         Assert.AreEqual("codex", config.Tools[0].Id);
         Assert.AreEqual("ollama", config.Models[0].Provider);
         Assert.AreEqual("Führe die Tests aus.", config.Tasks[0].Prompt);
+        Assert.IsTrue(config.Tasks[0].Enabled);
     }
 
     [TestMethod]
@@ -65,6 +67,7 @@ public sealed class BenchmarkRunnerTests
               - id: run-tests
                 repoPath: /tmp/repo
                 prompt: "Führe die Tests aus."
+                enabled: true
             """;
 
         var config = BenchmarkConfigParser.Parse(yaml.Split('\n'));
@@ -91,6 +94,7 @@ public sealed class BenchmarkRunnerTests
               - id: run-tests
                 repoPath: /tmp/repo
                 prompt: "Führe die Tests aus."
+                enabled: true
             """;
 
         var config = BenchmarkConfigParser.Parse(yaml.Split('\n'));
@@ -120,6 +124,7 @@ public sealed class BenchmarkRunnerTests
               - id: run-tests
                 repoPath: /tmp/repo
                 prompt: "Führe die Tests aus."
+                enabled: true
             """;
 
         var config = BenchmarkConfigParser.Parse(yaml.Split('\n'));
@@ -146,6 +151,7 @@ public sealed class BenchmarkRunnerTests
               - id: run-tests
                 repoPath: ~/repo
                 prompt: "Führe die Tests aus."
+                enabled: true
             """;
 
         var config = BenchmarkConfigParser.Parse(yaml.Split('\n'));
@@ -164,11 +170,33 @@ public sealed class BenchmarkRunnerTests
             Defaults = new DefaultsConfig(),
             Tools = [new ToolConfig { Id = "codex", Enabled = true }, new ToolConfig { Id = "claude", Enabled = true }],
             Models = [new ModelConfig { Id = "m1", Provider = "ollama", Enabled = true }, new ModelConfig { Id = "m2", Provider = "ollama", Enabled = true }],
-            Tasks = [new TaskConfig { Id = "t1", RepoPath = "/tmp/repo", Prompt = "p1" }, new TaskConfig { Id = "t2", RepoPath = "/tmp/repo", Prompt = "p2" }]
+            Tasks = [new TaskConfig { Id = "t1", RepoPath = "/tmp/repo", Prompt = "p1", Enabled = true }, new TaskConfig { Id = "t2", RepoPath = "/tmp/repo", Prompt = "p2", Enabled = true }]
         };
 
         var runs = BenchmarkOrchestrator.PlanRuns(config, "/tmp/runs", DateTimeOffset.Parse("2026-03-23T10:00:00Z")).ToArray();
         Assert.AreEqual(8, runs.Length);
+    }
+
+    [TestMethod]
+    public void PlanRunsSkipsDisabledTasks()
+    {
+        var config = new BenchmarkConfig
+        {
+            Version = 1,
+            Defaults = new DefaultsConfig(),
+            Tools = [new ToolConfig { Id = "codex", Enabled = true }],
+            Models = [new ModelConfig { Id = "m1", Provider = "ollama", Enabled = true }],
+            Tasks =
+            [
+                new TaskConfig { Id = "t1", RepoPath = "/tmp/repo", Prompt = "p1", Enabled = true },
+                new TaskConfig { Id = "t2", RepoPath = "/tmp/repo", Prompt = "p2", Enabled = false }
+            ]
+        };
+
+        var runs = BenchmarkOrchestrator.PlanRuns(config, "/tmp/runs", DateTimeOffset.Parse("2026-03-23T10:00:00Z")).ToArray();
+
+        Assert.AreEqual(1, runs.Length);
+        Assert.AreEqual("t1", runs[0].Task.Id);
     }
 
     [TestMethod]
@@ -182,7 +210,7 @@ public sealed class BenchmarkRunnerTests
             Defaults = new DefaultsConfig(),
             Tools = [new ToolConfig { Id = "codex", Enabled = true }, new ToolConfig { Id = "codex", Enabled = true }],
             Models = [new ModelConfig { Id = "m1", Provider = "ollama", Enabled = true }],
-            Tasks = [new TaskConfig { Id = "t1", RepoPath = repo, Prompt = "prompt" }]
+            Tasks = [new TaskConfig { Id = "t1", RepoPath = repo, Prompt = "prompt", Enabled = true }]
         };
 
         Assert.ThrowsExactly<BenchmarkConfigurationException>(() => BenchmarkConfigValidator.Validate(config));
@@ -199,7 +227,7 @@ public sealed class BenchmarkRunnerTests
             Defaults = new DefaultsConfig { SkipPermissions = PermissionRequestPolicy.Prompt },
             Tools = [new ToolConfig { Id = "claude", Enabled = true }],
             Models = [new ModelConfig { Id = "m1", Provider = "ollama", Enabled = true }],
-            Tasks = [new TaskConfig { Id = "t1", RepoPath = repo, Prompt = "prompt" }]
+            Tasks = [new TaskConfig { Id = "t1", RepoPath = repo, Prompt = "prompt", Enabled = true }]
         };
 
         var exception = Assert.ThrowsExactly<BenchmarkConfigurationException>(() => BenchmarkConfigValidator.Validate(config));
@@ -259,7 +287,7 @@ public sealed class BenchmarkRunnerTests
             },
             Tools = [new ToolConfig { Id = "codex", Enabled = true }],
             Models = [new ModelConfig { Id = "model-a", Provider = "ollama", Enabled = true }],
-            Tasks = [new TaskConfig { Id = "task-a", RepoPath = repo, Prompt = "prompt" }]
+            Tasks = [new TaskConfig { Id = "task-a", RepoPath = repo, Prompt = "prompt", Enabled = true }]
         };
 
         var orchestrator = new BenchmarkOrchestrator(new ToolRunnerFactory(), new GitClient(), new FakeProcessRunner(), new Clock());
@@ -306,7 +334,7 @@ public sealed class BenchmarkRunnerTests
             },
             Tools = [new ToolConfig { Id = "opencode", Enabled = true }],
             Models = [new ModelConfig { Id = "model-a", Provider = "ollama", Enabled = true }],
-            Tasks = [new TaskConfig { Id = "task-a", RepoPath = repo, Prompt = "prompt" }]
+            Tasks = [new TaskConfig { Id = "task-a", RepoPath = repo, Prompt = "prompt", Enabled = true }]
         };
 
         var orchestrator = new BenchmarkOrchestrator(new ToolRunnerFactory(), new GitClient(), processRunner, new Clock());
@@ -359,7 +387,7 @@ public sealed class BenchmarkRunnerTests
             },
             Tools = [new ToolConfig { Id = "opencode", Enabled = true }],
             Models = [new ModelConfig { Id = "model-a", Provider = "ollama", Enabled = true }],
-            Tasks = [new TaskConfig { Id = "task-a", RepoPath = repo, Prompt = "prompt" }]
+            Tasks = [new TaskConfig { Id = "task-a", RepoPath = repo, Prompt = "prompt", Enabled = true }]
         };
 
         var orchestrator = new BenchmarkOrchestrator(new ToolRunnerFactory(), new GitClient(), processRunner, new Clock());
@@ -424,7 +452,7 @@ public sealed class BenchmarkRunnerTests
             },
             Tools = [new ToolConfig { Id = "codex", Enabled = true }],
             Models = [new ModelConfig { Id = "model-a", Provider = "ollama", Enabled = true }],
-            Tasks = [new TaskConfig { Id = "task-a", RepoPath = repo, Prompt = "prompt" }]
+            Tasks = [new TaskConfig { Id = "task-a", RepoPath = repo, Prompt = "prompt", Enabled = true }]
         };
 
         var orchestrator = new BenchmarkOrchestrator(new ToolRunnerFactory(), new GitClient(), processRunner, new Clock());
@@ -575,7 +603,7 @@ public sealed class BenchmarkRunnerTests
         SkipPermissions = skipPermissions,
         Tool = new ToolConfig { Id = toolId, Enabled = true },
         Model = new ModelConfig { Id = "model-a", Provider = "ollama", Enabled = true },
-        Task = new TaskConfig { Id = "task-a", RepoPath = "/tmp/repo", Prompt = "Do the thing" }
+        Task = new TaskConfig { Id = "task-a", RepoPath = "/tmp/repo", Prompt = "Do the thing", Enabled = true }
     };
 
     private static string CreateTemporaryDirectory()

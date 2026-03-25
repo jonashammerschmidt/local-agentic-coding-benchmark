@@ -36,6 +36,16 @@ tasks:
   - id: run-tests
     repoPath: ~/dev/fst-common
     prompt: "Führe die Tests aus."
+    enabled: true
   - id: run-build-checks
     repoPath: ~/dev/fst-common
     prompt: "Führe die Build-Checks aus."
+    enabled: true
+  - id: write-tests
+    repoPath: ~/dev/fst-common
+    prompt: "Write tests for frontend/projects/fst/common/src/lib/helpers/data/date.helper.ts; run them and iterate on them if they fail."
+    enabled: true
+  - id: write-demo
+    repoPath: ~/dev/fst-common
+    prompt: "Lege mir bitte die Demo für Aktionen in der Toolbar (frontend/projects/fst-common-demo/src/app/pages/card-demo/card-demo.page.html:39) passend zu den anderen an, basierend auf dem was in der subHeadline schon zu formuliert wurde. Bitte verifiziere per Build."
+    enabled: true

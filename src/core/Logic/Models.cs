@@ -38,6 +38,7 @@ public sealed class TaskConfig
     public string Id { get; init; } = string.Empty;
     public string RepoPath { get; init; } = string.Empty;
     public string Prompt { get; init; } = string.Empty;
+    public bool Enabled { get; init; }
 }
 
 public sealed class PlannedRun
