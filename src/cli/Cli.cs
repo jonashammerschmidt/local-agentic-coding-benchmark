@@ -7,7 +7,7 @@ public static class Cli
     public static async Task<int> RunAsync(string[] args)
     {
         var command = args.FirstOrDefault()?.ToLowerInvariant() ?? "run";
-        var remaining = command is "run" or "report"
+        var remaining = command is "run" or "report" or "review"
             ? args.Skip(1).ToArray()
             : args;
 
@@ -19,6 +19,7 @@ public static class Cli
             {
                 "run" => await RunBenchmarkAsync(configPath),
                 "report" => await GenerateReportAsync(configPath),
+                "review" => await ReviewBenchmarkAsync(configPath),
                 "help" or "--help" or "-h" => PrintHelp(),
                 _ => PrintUnknownCommand(command)
             };
@@ -88,16 +89,27 @@ public static class Cli
         return 0;
     }
 
+    private static async Task<int> ReviewBenchmarkAsync(string configPath)
+    {
+        var config = BenchmarkConfigParser.Load(configPath);
+
+        var reviewService = new ReviewService(new GitClient());
+        await reviewService.ReviewAsync(config, Path.GetFullPath(configPath), CancellationToken.None);
+        return 0;
+    }
+
     private static int PrintHelp()
     {
         var help = """
             Usage:
               benchmark-orchestrator run [benchmark.yaml]
               benchmark-orchestrator report [benchmark.yaml]
+              benchmark-orchestrator review [benchmark.yaml]
 
             Commands:
               run     Execute all enabled tool/model/task combinations.
               report  Rebuild the aggregated Markdown report from run artifacts.
+              review  Replay run patches, show agent output, and persist quality grades.
             """;
 
         Console.WriteLine(help);

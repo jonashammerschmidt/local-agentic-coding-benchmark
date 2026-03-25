@@ -594,6 +594,396 @@ public sealed class BenchmarkRunnerTests
         StringAssert.Contains(await File.ReadAllTextAsync(outputPath), "git version");
     }
 
+    [TestMethod]
+    public void ReviewServiceOrdersRunsByTaskThenModelThenTool()
+    {
+        var temp = CreateTemporaryDirectory();
+        var artifactsRoot = Path.Combine(temp, "runs");
+        Directory.CreateDirectory(artifactsRoot);
+
+        WriteStoredRun(
+            Path.Combine(artifactsRoot, "run-1"),
+            new StoredRunRecord
+            {
+                RunId = "run-1",
+                Tool = "opencode",
+                Model = "m2",
+                Task = "t1",
+                RepoPath = "/tmp/repo",
+                Status = RunStatus.Succeeded,
+                StartedAtUtc = DateTimeOffset.Parse("2026-03-24T10:00:02Z"),
+                ArtifactDirectory = Path.Combine(artifactsRoot, "run-1")
+            });
+        WriteStoredRun(
+            Path.Combine(artifactsRoot, "run-2"),
+            new StoredRunRecord
+            {
+                RunId = "run-2",
+                Tool = "codex",
+                Model = "m1",
+                Task = "t2",
+                RepoPath = "/tmp/repo",
+                Status = RunStatus.Succeeded,
+                StartedAtUtc = DateTimeOffset.Parse("2026-03-24T10:00:01Z"),
+                ArtifactDirectory = Path.Combine(artifactsRoot, "run-2")
+            });
+        WriteStoredRun(
+            Path.Combine(artifactsRoot, "run-3"),
+            new StoredRunRecord
+            {
+                RunId = "run-3",
+                Tool = "codex",
+                Model = "m1",
+                Task = "t1",
+                RepoPath = "/tmp/repo",
+                Status = RunStatus.Succeeded,
+                StartedAtUtc = DateTimeOffset.Parse("2026-03-24T10:00:00Z"),
+                ArtifactDirectory = Path.Combine(artifactsRoot, "run-3")
+            });
+        WriteStoredRun(
+            Path.Combine(artifactsRoot, "run-4"),
+            new StoredRunRecord
+            {
+                RunId = "run-4",
+                Tool = "codex",
+                Model = "m1",
+                Task = "t1",
+                RepoPath = "/tmp/repo",
+                Status = RunStatus.Failed,
+                StartedAtUtc = DateTimeOffset.Parse("2026-03-24T09:00:00Z"),
+                ArtifactDirectory = Path.Combine(artifactsRoot, "run-4")
+            });
+
+        var runs = ReviewService.GetReviewRuns(artifactsRoot);
+
+        CollectionAssert.AreEqual(new[] { "run-3", "run-1", "run-2" }, runs.Select(r => r.Record.RunId).ToArray());
+    }
+
+    [TestMethod]
+    public async Task ReviewServicePersistsRatingRegeneratesReportAndResetsRepo()
+    {
+        var temp = CreateTemporaryDirectory();
+        var repo = CreateGitRepo(temp);
+        var artifactsRoot = Path.Combine(temp, "runs");
+        var reportsRoot = Path.Combine(temp, "reports");
+        var artifactDirectory = Path.Combine(artifactsRoot, "run-1");
+        Directory.CreateDirectory(artifactDirectory);
+
+        await File.WriteAllTextAsync(Path.Combine(repo, "README.md"), "hello" + Environment.NewLine + "reviewed");
+        var gitClient = new GitClient();
+        var diff = gitClient.GetDiff(repo);
+        gitClient.ResetHard(repo);
+        await File.WriteAllTextAsync(Path.Combine(artifactDirectory, "code-diff.patch"), diff);
+        await File.WriteAllTextAsync(Path.Combine(artifactDirectory, "agent-output.md"), "agent output");
+        WriteStoredRun(
+            artifactDirectory,
+            new StoredRunRecord
+            {
+                RunId = "run-1",
+                Tool = "codex",
+                Model = "model-a",
+                Task = "task-a",
+                RepoPath = repo,
+                Status = RunStatus.Succeeded,
+                ExitCode = 0,
+                TimedOut = false,
+                ArtifactDirectory = artifactDirectory,
+                StartedAtUtc = DateTimeOffset.Parse("2026-03-24T10:00:00Z"),
+                FinishedAtUtc = DateTimeOffset.Parse("2026-03-24T10:00:03Z"),
+                DurationSeconds = 3.0,
+                QualityRating = string.Empty
+            });
+
+        var config = new BenchmarkConfig
+        {
+            Version = 1,
+            Defaults = new DefaultsConfig { ArtifactsRoot = "runs", ReportsRoot = "reports" },
+            Tools = [new ToolConfig { Id = "codex", Enabled = true }],
+            Models = [new ModelConfig { Id = "model-a", Provider = "ollama", Enabled = true }],
+            Tasks = [new TaskConfig { Id = "task-a", RepoPath = repo, Prompt = "prompt", Enabled = true }]
+        };
+
+        var originalIn = Console.In;
+        var originalOut = Console.Out;
+        var originalError = Console.Error;
+        using var input = new StringReader("7\n2\n");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+        Console.SetIn(input);
+        Console.SetOut(output);
+        Console.SetError(error);
+
+        try
+        {
+            var service = new ReviewService(gitClient);
+            await service.ReviewAsync(config, Path.Combine(temp, "benchmark.yaml"), CancellationToken.None);
+        }
+        finally
+        {
+            Console.SetIn(originalIn);
+            Console.SetOut(originalOut);
+            Console.SetError(originalError);
+        }
+
+        var stored = ReportService.LoadRecords(artifactsRoot).Single();
+        Assert.AreEqual("2", stored.QualityRating);
+        Assert.IsTrue(File.Exists(Path.Combine(reportsRoot, "results.md")));
+        StringAssert.Contains(await File.ReadAllTextAsync(Path.Combine(reportsRoot, "results.md")), "2");
+        StringAssert.Contains(output.ToString(), "agent output");
+        StringAssert.Contains(output.ToString(), "Please enter a valid grade from 1 to 6, or F for Failed.");
+        Assert.AreEqual("hello", File.ReadAllText(Path.Combine(repo, "README.md")));
+        Assert.IsTrue(new GitClient().IsClean(repo));
+    }
+
+    [TestMethod]
+    public async Task ReviewServiceSkipsEntireTaskWhenRepositoryIsDirty()
+    {
+        var temp = CreateTemporaryDirectory();
+        var repo = CreateGitRepo(temp);
+        await File.WriteAllTextAsync(Path.Combine(repo, "dirty.txt"), "dirty");
+        var artifactsRoot = Path.Combine(temp, "runs");
+        Directory.CreateDirectory(artifactsRoot);
+
+        WriteStoredRun(
+            Path.Combine(artifactsRoot, "run-1"),
+            new StoredRunRecord
+            {
+                RunId = "run-1",
+                Tool = "codex",
+                Model = "model-a",
+                Task = "task-a",
+                RepoPath = repo,
+                Status = RunStatus.Succeeded,
+                StartedAtUtc = DateTimeOffset.Parse("2026-03-24T10:00:00Z"),
+                ArtifactDirectory = Path.Combine(artifactsRoot, "run-1")
+            });
+        await File.WriteAllTextAsync(Path.Combine(artifactsRoot, "run-1", "code-diff.patch"), string.Empty);
+        await File.WriteAllTextAsync(Path.Combine(artifactsRoot, "run-1", "agent-output.md"), "agent output");
+
+        var config = new BenchmarkConfig
+        {
+            Version = 1,
+            Defaults = new DefaultsConfig { ArtifactsRoot = "runs", ReportsRoot = "reports" },
+            Tools = [new ToolConfig { Id = "codex", Enabled = true }],
+            Models = [new ModelConfig { Id = "model-a", Provider = "ollama", Enabled = true }],
+            Tasks = [new TaskConfig { Id = "task-a", RepoPath = repo, Prompt = "prompt", Enabled = true }]
+        };
+
+        var originalIn = Console.In;
+        var originalOut = Console.Out;
+        var originalError = Console.Error;
+        using var input = new StringReader(string.Empty);
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+        Console.SetIn(input);
+        Console.SetOut(output);
+        Console.SetError(error);
+
+        try
+        {
+            var service = new ReviewService(new GitClient());
+            await service.ReviewAsync(config, Path.Combine(temp, "benchmark.yaml"), CancellationToken.None);
+        }
+        finally
+        {
+            Console.SetIn(originalIn);
+            Console.SetOut(originalOut);
+            Console.SetError(originalError);
+        }
+
+        var stored = ReportService.LoadRecords(artifactsRoot).Single();
+        Assert.AreEqual(string.Empty, stored.QualityRating);
+        StringAssert.Contains(error.ToString(), "Skipping repository");
+    }
+
+    [TestMethod]
+    public async Task ReviewServiceAllowsEmptyPatchFiles()
+    {
+        var temp = CreateTemporaryDirectory();
+        var repo = CreateGitRepo(temp);
+        var artifactsRoot = Path.Combine(temp, "runs");
+        var artifactDirectory = Path.Combine(artifactsRoot, "run-1");
+        Directory.CreateDirectory(artifactDirectory);
+
+        await File.WriteAllTextAsync(Path.Combine(artifactDirectory, "code-diff.patch"), string.Empty);
+        await File.WriteAllTextAsync(Path.Combine(artifactDirectory, "agent-output.md"), "agent output");
+        WriteStoredRun(
+            artifactDirectory,
+            new StoredRunRecord
+            {
+                RunId = "run-1",
+                Tool = "codex",
+                Model = "model-a",
+                Task = "task-a",
+                RepoPath = repo,
+                Status = RunStatus.Succeeded,
+                ExitCode = 0,
+                TimedOut = false,
+                ArtifactDirectory = artifactDirectory,
+                StartedAtUtc = DateTimeOffset.Parse("2026-03-24T10:00:00Z"),
+                FinishedAtUtc = DateTimeOffset.Parse("2026-03-24T10:00:03Z"),
+                DurationSeconds = 3.0,
+                QualityRating = string.Empty
+            });
+
+        var config = new BenchmarkConfig
+        {
+            Version = 1,
+            Defaults = new DefaultsConfig { ArtifactsRoot = "runs", ReportsRoot = "reports" },
+            Tools = [new ToolConfig { Id = "codex", Enabled = true }],
+            Models = [new ModelConfig { Id = "model-a", Provider = "ollama", Enabled = true }],
+            Tasks = [new TaskConfig { Id = "task-a", RepoPath = repo, Prompt = "prompt", Enabled = true }]
+        };
+
+        var originalIn = Console.In;
+        var originalOut = Console.Out;
+        var originalError = Console.Error;
+        using var input = new StringReader("1\n");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+        Console.SetIn(input);
+        Console.SetOut(output);
+        Console.SetError(error);
+
+        try
+        {
+            var service = new ReviewService(new GitClient());
+            await service.ReviewAsync(config, Path.Combine(temp, "benchmark.yaml"), CancellationToken.None);
+        }
+        finally
+        {
+            Console.SetIn(originalIn);
+            Console.SetOut(originalOut);
+            Console.SetError(originalError);
+        }
+
+        var stored = ReportService.LoadRecords(artifactsRoot).Single();
+        Assert.AreEqual("1", stored.QualityRating);
+        StringAssert.Contains(output.ToString(), "Code Diff: <empty>");
+        Assert.IsTrue(new GitClient().IsClean(repo));
+    }
+
+    [TestMethod]
+    public async Task ReviewCommandWorksWithArtifactsRootOnlyConfig()
+    {
+        var temp = CreateTemporaryDirectory();
+        var repo = CreateGitRepo(temp);
+        var artifactsRoot = Path.Combine(temp, "runs");
+        var artifactDirectory = Path.Combine(artifactsRoot, "run-1");
+        Directory.CreateDirectory(artifactDirectory);
+
+        await File.WriteAllTextAsync(Path.Combine(artifactDirectory, "code-diff.patch"), string.Empty);
+        await File.WriteAllTextAsync(Path.Combine(artifactDirectory, "agent-output.md"), "agent output");
+        WriteStoredRun(
+            artifactDirectory,
+            new StoredRunRecord
+            {
+                RunId = "run-1",
+                Tool = "codex",
+                Model = "model-a",
+                Task = "task-a",
+                RepoPath = repo,
+                Status = RunStatus.Succeeded,
+                ArtifactDirectory = artifactDirectory,
+                StartedAtUtc = DateTimeOffset.Parse("2026-03-24T10:00:00Z"),
+                FinishedAtUtc = DateTimeOffset.Parse("2026-03-24T10:00:03Z")
+            });
+
+        var configPath = Path.Combine(temp, "benchmark.yaml");
+        await File.WriteAllTextAsync(
+            configPath,
+            """
+            version: 1
+
+            defaults:
+              artifactsRoot: runs
+            """);
+
+        var originalIn = Console.In;
+        var originalOut = Console.Out;
+        var originalError = Console.Error;
+        using var input = new StringReader("3\n");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+        Console.SetIn(input);
+        Console.SetOut(output);
+        Console.SetError(error);
+
+        try
+        {
+            var exitCode = await LocalAgenticCodingBenchmark.Cli.Cli.RunAsync(["review", configPath]);
+            Assert.AreEqual(0, exitCode);
+        }
+        finally
+        {
+            Console.SetIn(originalIn);
+            Console.SetOut(originalOut);
+            Console.SetError(originalError);
+        }
+
+        var stored = ReportService.LoadRecords(artifactsRoot).Single();
+        Assert.AreEqual("3", stored.QualityRating);
+    }
+
+    [TestMethod]
+    public async Task ReviewServiceAcceptsFailedShortcut()
+    {
+        var temp = CreateTemporaryDirectory();
+        var repo = CreateGitRepo(temp);
+        var artifactsRoot = Path.Combine(temp, "runs");
+        var artifactDirectory = Path.Combine(artifactsRoot, "run-1");
+        Directory.CreateDirectory(artifactDirectory);
+
+        await File.WriteAllTextAsync(Path.Combine(artifactDirectory, "code-diff.patch"), string.Empty);
+        await File.WriteAllTextAsync(Path.Combine(artifactDirectory, "agent-output.md"), "agent output");
+        WriteStoredRun(
+            artifactDirectory,
+            new StoredRunRecord
+            {
+                RunId = "run-1",
+                Tool = "codex",
+                Model = "model-a",
+                Task = "task-a",
+                RepoPath = repo,
+                Status = RunStatus.Succeeded,
+                ArtifactDirectory = artifactDirectory,
+                StartedAtUtc = DateTimeOffset.Parse("2026-03-24T10:00:00Z"),
+                FinishedAtUtc = DateTimeOffset.Parse("2026-03-24T10:00:03Z")
+            });
+
+        var config = new BenchmarkConfig
+        {
+            Version = 1,
+            Defaults = new DefaultsConfig { ArtifactsRoot = "runs", ReportsRoot = "reports" }
+        };
+
+        var originalIn = Console.In;
+        var originalOut = Console.Out;
+        var originalError = Console.Error;
+        using var input = new StringReader("f\n");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+        Console.SetIn(input);
+        Console.SetOut(output);
+        Console.SetError(error);
+
+        try
+        {
+            var service = new ReviewService(new GitClient());
+            await service.ReviewAsync(config, Path.Combine(temp, "benchmark.yaml"), CancellationToken.None);
+        }
+        finally
+        {
+            Console.SetIn(originalIn);
+            Console.SetOut(originalOut);
+            Console.SetError(originalError);
+        }
+
+        var stored = ReportService.LoadRecords(artifactsRoot).Single();
+        Assert.AreEqual("Failed", stored.QualityRating);
+        StringAssert.Contains(output.ToString(), "QualityRating (1-6, F=Failed): ");
+    }
+
     private static PlannedRun CreatePlannedRun(string toolId, PermissionRequestPolicy skipPermissions = PermissionRequestPolicy.Skip) => new()
     {
         RunId = "run-1",
@@ -670,5 +1060,13 @@ public sealed class BenchmarkRunnerTests
 
             return Task.FromResult(result);
         }
+    }
+
+    private static void WriteStoredRun(string artifactDirectory, StoredRunRecord record)
+    {
+        Directory.CreateDirectory(artifactDirectory);
+        File.WriteAllText(
+            Path.Combine(artifactDirectory, "run.json"),
+            System.Text.Json.JsonSerializer.Serialize(record, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
     }
 }

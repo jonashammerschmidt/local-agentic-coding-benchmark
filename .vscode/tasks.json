@@ -72,6 +72,22 @@
       ],
       "problemMatcher": "$msCompile",
       "dependsOn": "⚒ build"
+    },
+    {
+      "label": "📝 review",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "run",
+        "--no-build",
+        "--project",
+        "src/cli/LocalAgenticCodingBenchmark.Cli.csproj",
+        "--",
+        "review",
+        "benchmark.yaml"
+      ],
+      "problemMatcher": "$msCompile",
+      "dependsOn": "⚒ build"
     }
   ]
 }

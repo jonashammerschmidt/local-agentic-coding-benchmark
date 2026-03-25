@@ -5,7 +5,7 @@ namespace LocalAgenticCodingBenchmark.Core;
 
 public sealed class BenchmarkOrchestrator(
     ToolRunnerFactory runnerFactory,
-    GitClient gitClient,
+    IGitClient gitClient,
     IProcessRunner processRunner,
     Clock clock)
 {

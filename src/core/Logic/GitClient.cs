@@ -1,6 +1,16 @@
 namespace LocalAgenticCodingBenchmark.Core;
 
-public sealed class GitClient
+public interface IGitClient
+{
+    bool IsClean(string repoPath);
+    string GetStatusPorcelain(string repoPath);
+    string GetDiff(string repoPath);
+    void ResetHard(string repoPath);
+    void EnsurePatchApplies(string repoPath, string patchFilePath);
+    void ApplyPatch(string repoPath, string patchFilePath);
+}
+
+public sealed class GitClient : IGitClient
 {
     public bool IsClean(string repoPath)
     {
@@ -24,6 +34,16 @@ public sealed class GitClient
     {
         RunGit(repoPath, "reset", "--hard", "HEAD");
         RunGit(repoPath, "clean", "-fd");
+    }
+
+    public void EnsurePatchApplies(string repoPath, string patchFilePath)
+    {
+        RunGit(repoPath, "apply", "--check", "--binary", patchFilePath);
+    }
+
+    public void ApplyPatch(string repoPath, string patchFilePath)
+    {
+        RunGit(repoPath, "apply", "--binary", patchFilePath);
     }
 
     private static GitCommandResult RunGit(string repoPath, params string[] args)

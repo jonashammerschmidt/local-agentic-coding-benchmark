@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\core\LocalAgenticCodingBenchmark.Core.csproj" />
+    <ProjectReference Include="..\..\src\cli\LocalAgenticCodingBenchmark.Cli.csproj" />
   </ItemGroup>
 
   <ItemGroup>
