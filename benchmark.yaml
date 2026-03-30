@@ -49,3 +49,7 @@ tasks:
     repoPath: ~/dev/fst-common
     prompt: "Lege mir bitte die Demo für Aktionen in der Toolbar (frontend/projects/fst-common-demo/src/app/pages/card-demo/card-demo.page.html:39) passend zu den anderen an, basierend auf dem was in der subHeadline schon zu formuliert wurde. Bitte verifiziere per Build."
     enabled: true
+  - id: write-visual-test
+    repoPath: ~/dev/fst-common
+    prompt: "Füge drei weitere Visual-Tests für den File Picker anhand dessen Überblick (/formulare/file-picker) in eine neue Testfile hinzu: (1) Zustand mit initialem Dropdown-Overlay, (2) Zustand mit ausgewählter Datei, (3) Zustand mit bereits ausgewählter Datei erneut das Dropdown-Overlay öffnen“; beim dritten Test soll der Snapshot das gesamte inner Code-Example capturen, bei den ersten beiden nur das Dropdown-Overlay. Du musst die Snapshots nicht erstellen, weil das macht bei uns die Pipeline. Build checke die visual tests und führe diese Tests dann solange aus bis sie nur noch fehlschlagen, weil es Expected noch nicht gibt, aber schonmal grob funktioniert."
+    enabled: true
